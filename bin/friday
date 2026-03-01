@@ -19,7 +19,5 @@ end
 require "friday"
 
 # 4. Initialize and Start
-# setup() handles both global (~/.friday) and local (./.friday)
-Friday::Project.setup
-
+# The CLI handles checking and prompting for project setup
 Friday::Cli.start(ARGV)

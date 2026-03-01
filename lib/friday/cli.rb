@@ -18,7 +18,7 @@ module Friday
       unless Project.find_root
         puts pastel.yellow("No .friday project detected in this directory or its parents.")
         if prompt.yes?("Initialize a new project in #{Dir.pwd}?")
-          Project.setup(Dir.pwd)
+          Project.setup(File.join(Dir.pwd, Project::DEFAULT_ROOT))
         else
           puts "Exiting."
           return

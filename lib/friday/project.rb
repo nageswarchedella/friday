@@ -14,12 +14,18 @@ module Friday
 
     def self.find_root
       current = Dir.pwd
+      home_dir = File.expand_path("~")
+
       loop do
         potential = File.join(current, DEFAULT_ROOT)
-        return potential if Dir.exist?(potential)
+        
+        # If we found a .friday folder, but it's the global one (~/.friday), ignore it
+        if Dir.exist?(potential) && potential != File.join(home_dir, DEFAULT_ROOT)
+          return potential
+        end
         
         parent = File.expand_path("..", current)
-        break if parent == current
+        break if parent == current # Reached system root
         current = parent
       end
       nil

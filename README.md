@@ -4,7 +4,7 @@
 
 ## 🚀 Key Features
 
-- **Project-Local Architecture:** Everything is stored in a `.friday/` directory within your project. No hidden global state.
+- **Dual-Layer Architecture:** Seamlessly run `friday` anywhere. Uses `~/.friday` for global API keys and universal personas, and `./.friday` for project-specific RAG indexing and local history.
 - **Small Footprint:** Minimal dependencies. No heavy ORMs (ActiveRecord) or large utility libraries (ActiveSupport). 
 - **Transparent History:** Sessions are stored as simple **JSON files**, making them easy for users to read, audit, and share.
 - **Highly Customizable Personas:** Sub-agents are defined as simple **Markdown files** with YAML frontmatter. Highly portable and easy to customize.
@@ -21,18 +21,14 @@
 
 ### Installation
 1. Clone this repository.
-2. Install dependencies:
-   ```bash
-   bundle install
-   ```
-3. Build and Install globally as a Gem:
+2. Build and Install globally as a Gem:
    ```bash
    gem build friday-cli.gemspec
    ```
    ```bash
    gem install ./friday-cli-0.1.0.gem
    ```
-4. (Optional) Set your Gemini API Key in a `.env` file (or globally in `~/.friday/config.yml`):
+3. (Optional) Set your Gemini API Key in a `.env` file (or globally in `~/.friday/config.yml`):
    ```bash
    echo "GEMINI_API_KEY=your_key_here" > .env
    ```
@@ -41,18 +37,21 @@
 
 ### Start a Chat
 ```bash
-./bin/friday start
+friday start
 ```
+*(If run in a new folder, Friday will ask to initialize a local project structure).*
 
 ### Resume a Session
 ```bash
-./bin/friday list
-./bin/friday start -s <session_id>
+friday list
+friday start -s <session_id>
 ```
 
 ### In-Chat Commands
 - `/index`: Recursively scan and index your project for RAG.
+- `/model`: Interactively list and switch the active LLM model.
 - `/agent <name>`: Switch to a specialized sub-agent (e.g., `/agent HardwareExpert`).
+- `/sh <cmd>`: Execute a local shell command.
 - `/stats`: View token usage and message counts.
 - `/help`: Show all available commands.
 - `exit` or `/exit`: Save the session and quit.
