@@ -1,17 +1,17 @@
 # Friday
 
-**Friday** is a lightweight, local-first, and LLM-vendor-agnostic CLI application designed for software and hardware engineers. It combines agentic AI capabilities with a robust Retrieval-Augmented Generation (RAG) system, allowing you to interact with your codebase and documentation using both cloud (Gemini) and local (Ollama) models.
+**Friday** is a lightweight, local-first, and LLM-vendor-agnostic CLI application designed for software and hardware engineers. It is built to be **extremely lean**, with a tiny footprint compared to heavier alternatives like Claude Code or Gemini CLI.
 
 ## 🚀 Key Features
 
 - **Project-Local Architecture:** Everything is stored in a `.friday/` directory within your project. No hidden global state.
-- **Sub-Agents as Markdown:** Personas are defined in simple `.md` files. Commit them to Git to share experts with your team.
-- **Surgical Patching:** The agent can modify your code using precise SEARCH/REPLACE blocks. It shows a colored `git-style` diff and requires your confirmation before applying changes.
-- **Integrated RAG:** Index your project files into a local `sqlite-vec` database for grounded, context-aware answers.
-- **Real-Time Streaming:** Responses appear word-by-word as they are generated, providing a snappy REPL experience.
-- **Professional REPL:** Built with `Reline` for persistent command history (Up/Down arrows) and multiline input support (end a line with ``).
-- **Vendor Agnostic:** Seamlessly switch between Google Gemini, local Ollama models (Llama, Gemma, DeepSeek, Minimax), and more.
-- **Telemetry & Logs:** Transparent JSON session history and a detailed `debug.log` for troubleshooting.
+- **Small Footprint:** Minimal dependencies. No heavy ORMs (ActiveRecord) or large utility libraries (ActiveSupport). 
+- **Transparent History:** Sessions are stored as simple **JSON files**, making them easy for users to read, audit, and share.
+- **Highly Customizable Personas:** Sub-agents are defined as simple **Markdown files** with YAML frontmatter. Highly portable and easy to customize.
+- **Surgical Patching:** The agent can modify your code using precise SEARCH/REPLACE blocks with colored `git-style` diffs.
+- **Robust RAG System:** Built-in vector search using **SQLite + `sqlite-vec`**. Fast, local, and vendor-agnostic.
+- **Vendor Agnostic:** Seamlessly switch between Google Gemini, Anthropic, OpenAI, or local models via Ollama and LM Studio.
+- **Real-Time Streaming:** Word-by-word response generation for a snappy REPL experience.
 
 ## 🛠 Setup
 
@@ -25,7 +25,14 @@
    ```bash
    bundle install
    ```
-3. (Optional) Set your Gemini API Key in a `.env` file:
+3. Build and Install globally as a Gem:
+   ```bash
+   gem build friday-cli.gemspec
+   ```
+   ```bash
+   gem install ./friday-cli-0.1.0.gem
+   ```
+4. (Optional) Set your Gemini API Key in a `.env` file (or globally in `~/.friday/config.yml`):
    ```bash
    echo "GEMINI_API_KEY=your_key_here" > .env
    ```

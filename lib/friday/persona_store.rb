@@ -21,9 +21,16 @@ module Friday
     end
 
     def self.all
-      Dir.glob(File.join(Project.root, "agents", "*.md")).map do |f|
-        new(f)
-      end
+      # 1. Global Agents
+      global_agents = Dir.glob(File.join(Project.global_root, "agents", "*.md")).map { |f| new(f) }
+      
+      # 2. Local Project Agents
+      local_agents = Dir.glob(File.join(Project.root, "agents", "*.md")).map { |f| new(f) }
+      
+      # Merge: Local agents overwrite global ones with same name
+      (global_agents + local_agents).each_with_object({}) do |persona, hash|
+        hash[persona.name.downcase] = persona
+      end.values
     end
 
     def self.find_by_name(name)

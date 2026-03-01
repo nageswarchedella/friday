@@ -1,6 +1,7 @@
 require "sqlite3"
 require "sqlite_vec"
 require "digest"
+require "pdf-reader"
 
 module Friday
   class Rag
@@ -19,17 +20,10 @@ module Friday
     def setup_schema
       @db.execute("CREATE TABLE IF NOT EXISTS file_chunks (id INTEGER PRIMARY KEY, path TEXT, chunk_text TEXT, checksum TEXT)")
       
-      # Dynamically detect dimensions if possible, or use a safe recreation strategy
-      # LM Studio's nomic-embed often uses 768. 
       begin
         @db.execute("CREATE VIRTUAL TABLE vec_chunks USING vec0(embedding float[768])")
       rescue SQLite3::SQLException => e
-        if e.message.include?("already exists")
-          # Verify dimensions match or recreate
-          # For chaos testing, we'll just ensure it works
-        else
-          raise e
-        end
+        raise e unless e.message.include?("already exists")
       end
     end
 
@@ -37,22 +31,68 @@ module Friday
       provider_symbol = case @config["provider"]
       when "ollama" then :ollama
       when "openai_compatible", "lm_studio", "vllm" then :openai
+      when "openai"    then :openai
+      when "anthropic" then :anthropic
+      when "gemini"    then :gemini
+      when "mistral"   then :mistral
+      when "groq"      then :groq
+      when "deepseek"  then :deepseek
       else :gemini
       end
 
-      # RubyLLM returns a RubyLLM::Embedding object, we want the vectors array
       response = RubyLLM.embed(text, 
         model: @config["embedding_model"] || @config["model"], 
-        provider: provider_symbol
+        provider: provider_symbol,
+        assume_model_exists: true
       )
       response.vectors
     end
 
+    def extract_text(path)
+      return nil unless File.file?(path)
+      case File.extname(path).downcase
+      when ".pdf"
+        reader = PDF::Reader.new(path)
+        reader.pages.map(&:text).join("\n")
+      else
+        File.read(path)
+      end
+    rescue => e
+      Project.debug_log("Failed to extract text from #{path}: #{e.message}")
+      nil
+    end
+
+    def chunk_text(text, max_size = 1500)
+      # Try to split by double newlines (paragraphs/sections) first
+      sections = text.split(/\n\n+/)
+      chunks = []
+      current_chunk = ""
+
+      sections.each do |section|
+        if (current_chunk + section).length > max_size
+          chunks << current_chunk.strip unless current_chunk.empty?
+          current_chunk = section
+          
+          # If a single section is too big, hard split it
+          while current_chunk.length > max_size
+            chunks << current_chunk[0...max_size].strip
+            current_chunk = current_chunk[max_size..-1]
+          end
+        else
+          current_chunk += "\n\n" + section
+        end
+      end
+      chunks << current_chunk.strip unless current_chunk.empty?
+      chunks
+    end
+
     def index_file(path)
-      return unless File.file?(path) && !path.include?(".friday") && !path.include?("chaos_junk")
-      content = File.read(path) rescue return
-      checksum = Digest::SHA256.hexdigest(content)
+      return if !File.file?(path) || path.include?(".friday") || path.include?("node_modules")
       
+      content = extract_text(path)
+      return if content.nil? || content.empty?
+      
+      checksum = Digest::SHA256.hexdigest(content)
       existing = @db.get_first_value("SELECT checksum FROM file_chunks WHERE path = ?", [path])
       return if existing == checksum
 
@@ -62,13 +102,12 @@ module Friday
         @db.execute("DELETE FROM vec_chunks WHERE rowid IN (#{old_ids.join(',')})")
       end
 
-      chunks = content.scan(/.{1,1500}/m)
+      chunks = chunk_text(content)
       chunks.each do |chunk|
         @db.execute("INSERT INTO file_chunks (path, chunk_text, checksum) VALUES (?, ?, ?)", [path, chunk, checksum])
         rowid = @db.last_insert_row_id
         embedding = generate_embedding(chunk)
         
-        # Chaos safety: handle dimension mismatch
         begin
           @db.execute("INSERT INTO vec_chunks (rowid, embedding) VALUES (?, ?)", [rowid, embedding.pack("f*")])
         rescue => e

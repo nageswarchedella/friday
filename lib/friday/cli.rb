@@ -8,8 +8,25 @@ module Friday
     desc "start", "Initialize project and start a chat session"
     method_option :session_id, type: :string, aliases: "-s", desc: "Resume a specific session ID"
     def start
-      Project.setup
+      # 1. Ensure Global Root exists
+      Project.setup_global
+      
       pastel = Pastel.new
+      prompt = TTY::Prompt.new
+      
+      # 2. Check for Local Root
+      unless Project.find_root
+        puts pastel.yellow("No .friday project detected in this directory or its parents.")
+        if prompt.yes?("Initialize a new project in #{Dir.pwd}?")
+          Project.setup(Dir.pwd)
+        else
+          puts "Exiting."
+          return
+        end
+      end
+
+      # 3. Normal Startup
+      Project.setup # Locates existing or uses current
       input_handler = InputHandler.new
       
       session_id = options[:session_id]
@@ -19,6 +36,11 @@ module Friday
       
       agent = Agent.new(config, session)
       
+      # Basic Validation
+      if config["provider"] == "gemini" && (config["api_key"].nil? || config["api_key"].empty?) && ENV["GEMINI_API_KEY"].nil?
+        puts pastel.yellow("\n[Warning] Gemini API Key not found. You may need to set GEMINI_API_KEY in your .env or ~/.friday/config.yml")
+      end
+
       # Aesthetic Welcome
       puts pastel.bold.cyan(<<-'BANNER')
         ███████╗██████╗ ██╗██████╗  █████╗ ██╗   ██╗
@@ -55,19 +77,52 @@ module Friday
         case input.strip
         when "/help"
           puts "/index        - Scan and index all project files for RAG"
+          puts "/model        - List and switch the active LLM model"
+          puts "/sh <cmd>     - Execute a local shell command"
           puts "/stats        - Show tokens and usage"
           puts "/agent <name> - Manually switch persona"
           puts "/exit, /quit  - Save and exit"
           puts "exit, quit    - Save and exit"
+        when "/model"
+          models = agent.fetch_available_models
+          if models.first.start_with?("Error") || models.first.start_with?("No models")
+            puts pastel.red(models.first)
+          else
+            begin
+              chosen_model = prompt.select("Select a model to use for this project:", models, per_page: 15, filter: true)
+              # Update agent config in memory
+              agent.config["model"] = chosen_model
+              
+              # Save to local project config
+              local_config_path = File.join(Project.root, "config.yml")
+              local_config = File.exist?(local_config_path) ? YAML.load_file(local_config_path) : {}
+              local_config["model"] = chosen_model
+              File.write(local_config_path, local_config.to_yaml)
+              
+              puts pastel.green("✅ Switched project model to: #{chosen_model}")
+            rescue TTY::Reader::InputInterrupt
+              # User pressed Ctrl+C to cancel the menu
+              puts "Model selection cancelled."
+            end
+          end
         when "/index"
           spinner = TTY::Spinner.new("[:spinner] Indexing project files...")
           spinner.auto_spin
-          # Simple recursive indexing of current dir
-          Dir.glob("**/*").each do |file|
-            next if File.directory?(file) || file.include?(".friday") || file.include?("node_modules")
-            agent.rag.index_file(file)
+          begin
+            # Simple recursive indexing of current dir
+            Dir.glob("**/*").each do |file|
+              next if File.directory?(file) || file.include?(".friday") || file.include?("node_modules")
+              agent.rag.index_file(file)
+            end
+            spinner.success("Done!")
+          rescue => e
+            spinner.error("Failed: #{e.message}")
           end
-          spinner.stop("Done!")
+        when "/sh"
+          command = $1.strip
+          puts "Executing: #{command}"
+          output = `#{command} 2>&1`
+          puts output
         when "/stats"
           puts "Total Session Tokens: #{session.data['stats']['tokens']}"
           puts "Messages: #{session.data['messages'].size}"
@@ -84,7 +139,7 @@ module Friday
           full_response = ""
           first_chunk = true
           
-          agent.ask(input) do |chunk|
+          response = agent.ask(input) do |chunk|
             if first_chunk
               print "\r" + " " * 20 + "\r" # Clear the thinking message
               first_chunk = false
@@ -92,6 +147,12 @@ module Friday
             print chunk
             full_response += chunk
             $stdout.flush
+          end
+          
+          # If nothing was streamed but we got a direct string response (like an error message)
+          if full_response.empty? && response.is_a?(String) && !response.empty?
+            print "\r" + " " * 20 + "\r" # Clear the thinking message
+            print response
           end
           
           puts "\n" # New line after stream ends

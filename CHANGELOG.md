@@ -14,10 +14,14 @@ All notable changes to this project will be documented in this file.
     - `patch_file`: Surgical Search/Replace patching with colored diffs and user confirmation.
     - `execute_shell`: Run terminal commands with user confirmation.
     - `create_persona`: Allow the AI to generate new expert persona files on the fly.
-- **RAG System:** Integrated `sqlite-vec` for local vector search and file indexing via `/index`.
+- **RAG System:** 
+    - Integrated `sqlite-vec` for local vector search and file indexing via `/index`.
+    - Expanded support for indexing PDF files using `pdf-reader`.
+    - Improved context-aware chunking for better search relevance.
 - **Streaming:** Implemented real-time response streaming for a responsive UI.
 - **REPL Improvements:** 
     - Switched to `Reline` for persistent command history and arrow-key navigation.
+    - Added `/sh <command>` for direct shell execution from the REPL.
     - Added multiline input support using the `` trigger.
     - Styled prompt with colors and bold text.
 - **Session Management:** JSON-based session persistence with listing and resumption capabilities.

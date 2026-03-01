@@ -13,7 +13,7 @@ puts Friday::PersonaStore.all.map(&:name).join(", ")
 puts "-----------------------------------"
 
 # 1. Create Persona
-creation_prompt = "Please create a new persona for me named 'HardwareExpert'. Its description should be 'Expert in SystemVerilog and RTL Design'. Its instructions should be 'You are a specialized hardware architect. Always suggest non-blocking assignments for sequential logic.'"
+creation_prompt = "Please create a new persona for me named 'VerilogExpert'. Its description should be 'Expert in SystemVerilog and RTL Design'. Its instructions should be 'You are a specialized hardware architect. Always suggest non-blocking assignments for sequential logic.'"
 
 puts "Sending creation instruction..."
 agent.ask(creation_prompt)

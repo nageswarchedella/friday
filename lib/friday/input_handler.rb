@@ -34,9 +34,10 @@ module Friday
         
         break if line.nil? # Ctrl+D
         
-        # Check if line ends with a backslash
-        if line.end_with?("\\")
-          buffer << line[0...-1] # Remove the backslash
+        # Check if line ends with a backslash (ignoring trailing spaces)
+        trimmed = line.rstrip
+        if trimmed.end_with?("\\")
+          buffer << trimmed[0...-1].strip # Remove the backslash and any space before it
         else
           buffer << line
           break

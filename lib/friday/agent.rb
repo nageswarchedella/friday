@@ -75,11 +75,18 @@ module Friday
     end
 
     class ExecuteShell < RubyLLM::Tool
-      description "Run a terminal command. User will be asked for confirmation."
+      description "Run a terminal command to inspect the system, run tests, or check environment. PREFER read-only commands."
       param :command
       def execute(command:)
         prompt = TTY::Prompt.new
-        puts "\n[Action] AI wants to RUN command: #{command}"
+        
+        # Basic safety check for destructive commands
+        if command =~ /\b(rm|mkfs|dd|chmod|chown)\b/
+          puts "\n[WARNING] AI requested a potentially DESTRUCTIVE command: #{command}"
+        else
+          puts "\n[Action] AI wants to RUN command: #{command}"
+        end
+
         if prompt.yes?("Execute command?")
           output = `#{command} 2>&1`
           puts "[System] Command finished. Sending output back to AI..."
@@ -102,6 +109,53 @@ module Friday
       @current_persona = PersonaStore.find_by_name("Generalist") || PersonaStore.all.first
       self.class.current_instance = self
       Config.apply(@config)
+    end
+
+    def fetch_available_models
+      require "net/http"
+      require "json"
+      require "uri"
+
+      models = []
+      provider = @config["provider"]
+      
+      begin
+        case provider
+        when "gemini"
+          api_key = @config["api_key"] || ENV["GEMINI_API_KEY"]
+          return ["Error: GEMINI_API_KEY is missing"] unless api_key
+          
+          uri = URI("https://generativelanguage.googleapis.com/v1beta/models?key=#{api_key}")
+          response = Net::HTTP.get(uri)
+          data = JSON.parse(response)
+          models = data["models"].map { |m| m["name"].sub("models/", "") } if data["models"]
+          
+        when "ollama"
+          base = @config["api_base"] || "http://localhost:11434/v1"
+          # Ollama native API for listing models is /api/tags
+          uri = URI(base.sub("/v1", "/api/tags"))
+          response = Net::HTTP.get(uri)
+          data = JSON.parse(response)
+          models = data["models"].map { |m| m["name"] } if data["models"]
+          
+        when "openai_compatible", "lm_studio", "vllm", "openai"
+          base = @config["api_base"] || "https://api.openai.com/v1"
+          uri = URI("#{base}/models")
+          
+          req = Net::HTTP::Get.new(uri)
+          api_key = @config["api_key"] || ENV["OPENAI_API_KEY"]
+          req["Authorization"] = "Bearer #{api_key}" if api_key
+          
+          res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') { |http| http.request(req) }
+          data = JSON.parse(res.body)
+          models = data["data"].map { |m| m["id"] } if data["data"]
+        end
+      rescue => e
+        Project.debug_log("Failed to fetch models: #{e.message}")
+        return ["Error fetching models: #{e.message}"]
+      end
+      
+      models.empty? ? ["No models found or unrecognized provider."] : models.sort
     end
 
     def switch_persona(name)
@@ -183,10 +237,18 @@ module Friday
           last_response = chat.with_tools(*tools).ask(current_input) do |chunk|
             yield chunk.content if block_given? && chunk.content
           end
+        rescue RubyLLM::ConfigurationError => e
+          return "\n[Error] Configuration Missing: #{e.message}\n\nTo fix this, you can:\n1. Set an environment variable: export GEMINI_API_KEY='your_key'\n2. Add it to your global config: ~/.friday/config.yml\n3. Switch to a local provider like Ollama in your config.yml"
+        rescue Faraday::ConnectionFailed => e
+          return "\n[Error] Connection Failed: Could not reach the LLM provider at #{@config['api_base'] || 'the default endpoint'}.\n\nIf you are using Ollama or LM Studio, make sure the server is running."
         rescue => e
           Project.debug_log("Chat failure: #{e.message}. Attempting chat-only fallback.")
-          last_response = build_chat.call.ask(current_input) do |chunk|
-            yield chunk.content if block_given? && chunk.content
+          begin
+            last_response = build_chat.call.ask(current_input) do |chunk|
+              yield chunk.content if block_given? && chunk.content
+            end
+          rescue => fallback_e
+            return "\n[Error] Critical Failure: #{fallback_e.message}\n\nPlease check your .env file or .friday/config.yml settings."
           end
         end
 
@@ -222,16 +284,37 @@ module Friday
     def sync_history(chat)
       user_index = chat.messages.rindex { |m| m.role == :user }
       return unless user_index
+      
       chat.messages[(user_index + 1)..-1].each do |m|
-        content = m.content
-        if content.nil? || content.empty?
-          if m.respond_to?(:tool_calls) && m.tool_calls&.any?
-            content = "[TOOL_CALL] #{m.tool_calls.map(&:name).join(', ')}"
-          elsif m.role == :tool
+        # Extract role and content robustly (handles objects and hashes)
+        role = m.respond_to?(:role) ? m.role.to_s : (m[:role] || m["role"]).to_s
+        content = m.respond_to?(:content) ? m.content : (m[:content] || m["content"])
+        
+        # If content is empty but it's a tool-related message, generate a summary
+        if content.nil? || content.to_s.empty?
+          tool_calls = m.respond_to?(:tool_calls) ? m.tool_calls : (m[:tool_calls] || m["tool_calls"])
+          if tool_calls && !tool_calls.empty?
+            begin
+              # Handle different tool call structures
+              names = tool_calls.map do |tc| 
+                if tc.respond_to?(:name)
+                  tc.name
+                elsif tc.is_a?(Hash)
+                  tc[:name] || tc["name"] || "unknown"
+                else
+                  "tool"
+                end
+              end.join(", ")
+              content = "[TOOL_CALL] #{names}"
+            rescue
+              content = "[TOOL_CALL]"
+            end
+          elsif role == "tool"
             content = "[TOOL_RESULT]"
           end
         end
-        @session.add_message(m.role.to_s, content, m)
+        
+        @session.add_message(role, content, m)
       end
     end
   end

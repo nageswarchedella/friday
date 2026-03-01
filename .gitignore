@@ -12,10 +12,14 @@ db/*.sqlite3
 # Friday Config (Ignore if you put sensitive keys in here)
 .friday/config.yml
 
+# History & Agents
+.friday/history/*.json
+
 # Ruby / Dependencies
 /vendor/bundle/
 .bundle/
 Gemfile.lock
+*.gem
 
 # OS / IDE
 .DS_Store
