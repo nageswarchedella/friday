@@ -1,0 +1,6 @@
+provider: "ollama"      # gemini, ollama, openai_compatible, anthropic, etc.
+model: "minimax-m2.5:cloud" # the model name to use
+api_base: "http://localhost:11434/v1" # e.g., http://localhost:1234/v1 for LM Studio
+api_key: null           # if the local server requires one
+system_prompt_path: null # path to custom global system instructions
+agentic_mode: false     # reserved for future use

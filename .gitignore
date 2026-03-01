@@ -1,0 +1,28 @@
+# Security & Credentials
+.env
+.env.*
+!.env.example
+
+# Databases
+db/*.sqlite3
+.friday/rag.sqlite3
+.friday/debug.log
+.friday/prompt_history.log
+
+# Friday Config (Ignore if you put sensitive keys in here)
+.friday/config.yml
+
+# Ruby / Dependencies
+/vendor/bundle/
+.bundle/
+Gemfile.lock
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Temporary Test Files
+test_target.rb
+square_cube.py
+FRIDAY.md
